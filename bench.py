@@ -43,10 +43,14 @@ def main() -> None:
     print()
     print(f"평균 {statistics.mean(times):.1f}초 · 최소 {min(times):.1f}초 · 최대 {max(times):.1f}초")
     print()
-    print("판단 기준")
-    print("  5초 이하  → CPU로도 버틸 만함")
-    print("  5~15초    → 애매함. 데모는 되지만 답답함")
-    print("  15초 이상 → GPU 필요. 인프라 담당에게 전달")
+    print("※ 이 숫자는 '지금 이 기계' 기준이다.")
+    print("  맥(M칩)은 Metal로 GPU를 쓰므로 EC2 CPU와 직접 비교할 수 없다.")
+    print("  서버 스펙 판단은 실제 배포 대상에서 다시 측정할 것.")
+    print()
+    print("같은 기계 안에서 비교할 때 참고")
+    print("  3초 이하  → 개발·데모에 지장 없음")
+    print("  3~10초    → 쓸 수는 있지만 답답함")
+    print("  10초 이상 → 모델을 줄이거나 GPU 필요")
 
 
 if __name__ == "__main__":
