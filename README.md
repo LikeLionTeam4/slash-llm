@@ -11,7 +11,49 @@ Slash(/)는 자연어 질문과 `/` 슬래시 명령어를 한 입력창에서 �
 
 ## 시작하기
 
-> 실행 방법·환경변수·디렉터리 구조는 구현이 붙는 대로 이 섹션에 채웁니다.
+### 1. Ollama 준비
+
+```bash
+# https://ollama.com 에서 설치 후
+ollama pull gemma3:4b
+```
+
+### 2. 실행
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+### 3. 확인
+
+브라우저에서 http://localhost:8000/docs
+
+### 환경변수
+
+| 이름 | 기본값 | 설명 |
+|---|---|---|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama 주소 |
+| `LLM_MODEL` | `gemma3:4b` | 사용할 모델 |
+| `LLM_TIMEOUT` | `120` | 응답 대기 시간(초) |
+
+### API
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/health` | 상태 확인 |
+| `POST` | `/internal/v1/llm/summary` | 텍스트 요약 |
+
+```bash
+curl -X POST http://localhost:8000/internal/v1/llm/summary \
+  -H "Content-Type: application/json" \
+  -d '{"text": "요약할 긴 글"}'
+```
+
+> 지금은 HTTP로 직접 받습니다. 이후 SQS에서 Job을 받아 처리하고
+> 결과를 slash-api로 돌려주는 워커 구조로 바꿉니다.
 
 ## 관련 저장소
 
