@@ -64,7 +64,9 @@ def main() -> None:
             if len(summary) >= len(text):
                 print("\n⚠️  요약이 원문보다 길다. 프롬프트를 손봐야 함")
         else:
-            print(f"{res.status_code} — {res.json().get('detail')}")
+            body = res.json()
+            message = body.get("error", {}).get("message") or body.get("detail")
+            print(f"{res.status_code} — {message}")
 
 
 if __name__ == "__main__":
