@@ -9,10 +9,17 @@ class SummaryInputTooShort(ValueError):
 
 
 def prepare_summary_text(text: str, *, minimum: int, maximum: int) -> str:
-    normalized = text.strip()
-    if len(normalized) < minimum:
-        raise SummaryInputTooShort(actual=len(normalized), minimum=minimum)
-    return normalized[:maximum]
+    normalized = text.strip()[:maximum]
+    character_count = 0
+    for character in normalized:
+        if character.isspace():
+            continue
+        character_count += 1
+        if character_count >= minimum:
+            break
+    if character_count < minimum:
+        raise SummaryInputTooShort(actual=character_count, minimum=minimum)
+    return normalized
 
 
 def build_summary_prompt(text: str) -> str:
