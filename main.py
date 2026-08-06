@@ -9,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from summary_core import SummaryInputTooShort, build_summary_prompt, prepare_summary_text
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.getenv("LLM_MODEL", "gemma3:4b")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
@@ -165,33 +167,20 @@ def build_error_response(
     },
 )
 async def summary(req: SummaryRequest):
-    text = req.text.strip()
-
-    if len(text) < MIN_CHARS:
+    try:
+        text = prepare_summary_text(req.text, minimum=MIN_CHARS, maximum=MAX_CHARS)
+    except SummaryInputTooShort as exc:
         return build_error_response(
             status_code=400,
             detail=ErrorDetail(
                 code="INPUT_TOO_SHORT",
-                message=(
-                    f"요약할 만큼 긴 글이 아니다 ({len(text)}자, 최소 {MIN_CHARS}자)."
-                ),
+                message=str(exc),
                 retryable=False,
             ),
             request_id=req.requestId,
             task_id=req.taskId,
         )
-
-    if len(text) > MAX_CHARS:
-        text = text[:MAX_CHARS]
-
-    prompt = (
-        "다음 글을 한국어로 요약해라.\n"
-        "- 원문보다 짧게 쓴다\n"
-        "- 최대 3문장\n"
-        "- 요약문만 출력하고 다른 말은 붙이지 않는다\n"
-        "- 원문에 없는 내용은 지어내지 않는다\n\n"
-        f"{text}"
-    )
+    prompt = build_summary_prompt(text)
 
     # 사용자/IP 단위 rate limit은 slash-api가 담당한다. 여기서는 비싼 모델
     # 호출이 프로세스 처리 용량을 넘지 않도록 대기열 없이 즉시 거절한다.

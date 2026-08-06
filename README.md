@@ -32,6 +32,9 @@ uvicorn main:app --reload
 
 브라우저에서 http://localhost:8000/docs
 
+Backend 연동 및 향후 SQS adapter 경계는
+[`docs/BACKEND_CONTRACT.md`](docs/BACKEND_CONTRACT.md)에 정리돼 있습니다.
+
 ### 환경변수
 
 | 이름 | 기본값 | 설명 |

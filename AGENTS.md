@@ -39,11 +39,12 @@
 | 요청 추적 | 선택적 `requestId`, `taskId` 전달 |
 | 오류 응답 | 모델 timeout·연결·HTTP·잘못된 응답 구분 |
 | 자동 테스트 | `tests/test_main.py`의 mock 기반 계약 테스트 |
+| 요약 코어 | `summary_core.py`의 입력 정규화·프롬프트 생성 |
 
 아직 없는 항목:
 
 - 일반 대화 endpoint
-- SQS worker
+- SQS worker (`docs/BACKEND_CONTRACT.md`의 메시지 초안은 합의용이며 구현 계약 아님)
 - 배포 환경 검증
 
 일반 대화와 SQS는 현재 MVP 범위가 아니다. README와 `slash-docs/api/*.md`에
@@ -61,6 +62,7 @@
 | 응답 형식 | 기존 `{summary, model}` 호환 유지 |
 | 사용자 Rate Limit | `slash-api` 소유; `429 RATE_LIMITED`와 `Retry-After`로 연동 |
 | 모델 동시성 | LLM 프로세스가 환경변수 기준으로 제한; 초과 시 `503 MODEL_BUSY`와 `Retry-After` |
+| Backend 경계 | 내부 평탄 JSON 유지; 공개 envelope와 오류 변환은 `slash-api` 소유 |
 
 일반 대화, SQS, 성공 응답 envelope 같은 추가 계약은 별도 결정 없이 구현하지 않는다.
 
@@ -73,6 +75,7 @@
 - 모델 URL, 모델명, timeout, 입력 제한은 환경변수로 유지한다.
 - API key, 원문 전체, 민감 데이터는 불필요하게 로그에 남기지 않는다.
 - 현재 HTTP 구현을 SQS로 바꾸는 작업은 별도 결정 없이 진행하지 않는다.
+- SQS adapter는 Backend가 메시지 필드·재시도·DLQ 정책을 확정한 뒤 요약 코어 위에 추가한다.
 - 사용자/IP별 횟수 제한을 이 서비스에 중복 구현하지 않는다. LLM은 모델 호출 동시성과 timeout만 방어한다.
 
 ## 권장 내부 구조

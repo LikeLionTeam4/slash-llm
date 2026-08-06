@@ -292,3 +292,26 @@ def test_openapi_exposes_success_and_stable_error_contracts() -> None:
     for status_code in ("400", "502", "503", "504"):
         schema = operation["responses"][status_code]["content"]["application/json"]["schema"]
         assert schema["$ref"].endswith("/ErrorResponse")
+
+
+def test_internal_contract_does_not_copy_public_backend_envelope(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    async def fake_ask(prompt: str) -> str:
+        return "요약 결과"
+
+    monkeypatch.setattr(main, "ask_gemma", fake_ask)
+    success = client.post(
+        "/internal/v1/llm/summary",
+        json={"text": "가" * 150, "requestId": "correlation-1", "taskId": "task-1"},
+    ).json()
+    error = client.post(
+        "/internal/v1/llm/summary",
+        json={"text": "짧다", "requestId": "correlation-2", "taskId": "task-2"},
+    ).json()
+
+    assert "data" not in success and "meta" not in success
+    assert "meta" not in error
+    assert success["requestId"] == "correlation-1"
+    assert error["requestId"] == "correlation-2"
