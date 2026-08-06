@@ -127,6 +127,36 @@ pytest
 python -m compileall .
 ```
 
+### 팀 통합 스모크 테스트
+
+`slash-nlu`와 `slash-llm`을 같은 상위 폴더에 두고, 두 저장소에서 각각
+가상환경과 의존성 설치를 마친 뒤 실행합니다.
+
+```text
+slash/
+├── slash-nlu/
+└── slash-llm/
+```
+
+```bash
+cd slash-llm
+.venv/bin/python scripts/team_demo.py
+```
+
+위 명령은 가짜 Ollama와 NLU·LLM 서버를 임시 포트에 실행하고 파일 검색,
+상태 조회, 누락 인자, NLU→LLM 요약, 미지원 명령까지 5개 계약을 확인한 뒤
+모두 종료합니다. 모델 설치 없이 팀원이 API 연결을 빠르게 확인할 때 사용합니다.
+
+실제 Ollama와 `gemma3:4b`를 준비했다면 다음과 같이 모델 호출까지 확인합니다.
+
+```bash
+ollama serve
+.venv/bin/python scripts/team_demo.py --real-ollama
+```
+
+이 테스트는 현재 구현된 NLU와 LLM의 직접 HTTP 연동만 검증합니다. Backend의
+Task API와 로컬 Agent가 연결되기 전까지 Web→Backend→Agent 전체 E2E로 보지 않습니다.
+
 실제 모델을 포함한 로컬 수동 시험은 서버와 Ollama를 실행한 뒤 진행한다.
 
 ```bash
