@@ -35,6 +35,31 @@ uvicorn main:app --reload
 Backend 연동 및 향후 SQS adapter 경계는
 [`docs/BACKEND_CONTRACT.md`](docs/BACKEND_CONTRACT.md)에 정리돼 있습니다.
 
+### 컨테이너 실행
+
+Ollama와 모델은 애플리케이션 이미지에 포함하지 않습니다. 별도로 실행한 Ollama의
+주소를 `OLLAMA_URL`로 주입합니다.
+
+```bash
+docker build -t slash-llm:local .
+docker run --rm -p 8000:8000 \
+  --add-host host.docker.internal:host-gateway \
+  -e OLLAMA_URL=http://host.docker.internal:11434 \
+  slash-llm:local
+curl http://localhost:8000/health
+```
+
+`--add-host`는 Linux Docker에서 필요하며 Docker Desktop에서도 사용할 수 있습니다.
+
+컨테이너는 비루트 사용자로 실행됩니다. `dev` 또는 `main` 브랜치에 반영되면 GitHub
+Actions가 `sha-<commit>` 태그로 ECR에 이미지를 게시합니다.
+동일 커밋의 이미지가 이미 있으면 immutable 태그를 다시 게시하지 않고 성공 처리합니다.
+실제 dev 배포에는 `slash-infra`의 `values-dev.yaml` 이미지 태그와 `OLLAMA_URL`
+갱신이 별도로 필요합니다.
+현재 Helm 기준 Kubernetes Service는 `80`에서 컨테이너 `8000`으로 전달합니다.
+Ollama 배치 방식과 GPU, SQS worker·재시도·DLQ 정책은 아직 확정 계약이 아니므로 이
+이미지에는 포함하지 않습니다.
+
 ### 환경변수
 
 | 이름 | 기본값 | 설명 |
