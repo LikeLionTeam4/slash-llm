@@ -53,7 +53,7 @@ jobs:
             --env OLLAMA_URL=http://host.docker.internal:11435 \
             --publish 8000:8000 slash-llm:test
           curl --fail --silent --show-error \
-            --retry 30 --retry-delay 1 --retry-connrefused \
+            --retry 30 --retry-delay 1 --retry-connrefused --retry-all-errors \
             http://127.0.0.1:8000/health \
             | python -c 'import json, sys; body = json.load(sys.stdin); assert body == {"status": "ok", "model": "gemma3:4b"}, body'
           python -c 'import httpx; body = httpx.post("http://127.0.0.1:8000/internal/v1/llm/summary", json={"text": "가" * 150, "requestId": "container-smoke", "taskId": "task-smoke"}).json(); expected = {"summary": "팀 테스트용 요약 결과입니다.", "model": "gemma3:4b", "requestId": "container-smoke", "taskId": "task-smoke"}; assert body == expected, body'
