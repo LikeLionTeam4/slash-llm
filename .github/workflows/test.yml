@@ -3,7 +3,7 @@ name: test
 on:
   pull_request:
   push:
-    branches: [dev, "codex/**"]
+    branches: [main, dev, "codex/**"]
 
 jobs:
   pytest:
@@ -17,3 +17,93 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest
       - run: python -m compileall -q main.py summary_core.py samples.py bench.py tests
+
+  container-build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
+    needs: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: slash-llm:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start mock Ollama
+        run: |
+          python -m uvicorn scripts.mock_ollama:app --host 0.0.0.0 --port 11435 &
+          echo "$!" > "$RUNNER_TEMP/mock-ollama.pid"
+          curl --fail --silent --show-error \
+            --retry 30 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:11435/api/tags
+      - name: Verify container and Ollama connection
+        run: |
+          docker run --detach --name slash-llm-test \
+            --add-host host.docker.internal:host-gateway \
+            --env OLLAMA_URL=http://host.docker.internal:11435 \
+            --publish 8000:8000 slash-llm:test
+          curl --fail --silent --show-error \
+            --retry 30 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:8000/health \
+            | python -c 'import json, sys; body = json.load(sys.stdin); assert body == {"status": "ok", "model": "gemma3:4b"}, body'
+          python -c 'import httpx; body = httpx.post("http://127.0.0.1:8000/internal/v1/llm/summary", json={"text": "가" * 150, "requestId": "container-smoke", "taskId": "task-smoke"}).json(); expected = {"summary": "팀 테스트용 요약 결과입니다.", "model": "gemma3:4b", "requestId": "container-smoke", "taskId": "task-smoke"}; assert body == expected, body'
+      - name: Stop test services
+        if: always()
+        run: |
+          docker rm --force slash-llm-test || true
+          if [ -f "$RUNNER_TEMP/mock-ollama.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/mock-ollama.pid")" || true
+          fi
+
+  publish-image:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+    needs: [pytest, container-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-northeast-2
+      ECR_REGISTRY: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com
+      ECR_REPOSITORY: slash-llm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::727646470302:role/slash-llm-cicd
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Check immutable image tag
+        id: image
+        run: |
+          found=$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="sha-$GITHUB_SHA" \
+            --query 'length(images)' \
+            --output text)
+          if [ "$found" = "1" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.image.outputs.exists != 'true'
+      - uses: docker/build-push-action@v6
+        if: steps.image.outputs.exists != 'true'
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
