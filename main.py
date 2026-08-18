@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 import httpx
 from fastapi import FastAPI
@@ -14,6 +14,7 @@ from summary_core import SummaryInputTooShort, build_summary_prompt, prepare_sum
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.getenv("LLM_MODEL", "gemma3:4b")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+READY_TIMEOUT = float(os.getenv("LLM_READY_TIMEOUT", "2"))
 
 # 입력 제한
 # 짧은 글을 요약시키면 모델이 3줄을 채우려고 원문보다 길게 늘여 쓴다.
@@ -55,6 +56,12 @@ class ErrorResponse(BaseModel):
     taskId: Optional[str] = None
 
 
+class ReadinessResponse(BaseModel):
+    status: Literal["ready", "not_ready"]
+    model: str
+    reason: Optional[Literal["OLLAMA_UNAVAILABLE", "MODEL_NOT_FOUND"]] = None
+
+
 class ModelServiceError(Exception):
     def __init__(
         self,
@@ -76,6 +83,64 @@ class ModelServiceError(Exception):
 @app.get("/health")
 def health():
     return {"status": "ok", "model": MODEL}
+
+
+def create_ollama_readiness_client() -> httpx.AsyncClient:
+    """Readiness probe가 추론 timeout만큼 대기하지 않도록 짧게 제한한다."""
+    return httpx.AsyncClient(timeout=READY_TIMEOUT)
+
+
+@app.get(
+    "/ready",
+    response_model=ReadinessResponse,
+    response_model_exclude_none=True,
+    responses={503: {"model": ReadinessResponse, "description": "Ollama 준비 안 됨"}},
+)
+async def ready():
+    try:
+        async with create_ollama_readiness_client() as client:
+            response = await client.get(f"{OLLAMA_URL}/api/tags")
+            response.raise_for_status()
+            payload: Any = response.json()
+    except (httpx.HTTPError, ValueError):
+        return JSONResponse(
+            status_code=503,
+            content=ReadinessResponse(
+                status="not_ready",
+                model=MODEL,
+                reason="OLLAMA_UNAVAILABLE",
+            ).model_dump(exclude_none=True),
+        )
+
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        return JSONResponse(
+            status_code=503,
+            content=ReadinessResponse(
+                status="not_ready",
+                model=MODEL,
+                reason="OLLAMA_UNAVAILABLE",
+            ).model_dump(exclude_none=True),
+        )
+
+    available_models = {
+        model_name
+        for item in models
+        if isinstance(item, dict)
+        for model_name in (item.get("name"), item.get("model"))
+        if isinstance(model_name, str)
+    }
+    if MODEL not in available_models:
+        return JSONResponse(
+            status_code=503,
+            content=ReadinessResponse(
+                status="not_ready",
+                model=MODEL,
+                reason="MODEL_NOT_FOUND",
+            ).model_dump(exclude_none=True),
+        )
+
+    return ReadinessResponse(status="ready", model=MODEL)
 
 
 def create_ollama_client() -> httpx.AsyncClient:
