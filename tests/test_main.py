@@ -22,11 +22,92 @@ def install_ollama_transport(monkeypatch, handler) -> None:
     monkeypatch.setattr(main, "create_ollama_client", client_factory)
 
 
+def install_readiness_transport(monkeypatch, handler) -> None:
+    transport = httpx.MockTransport(handler)
+
+    def client_factory() -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=transport, timeout=main.READY_TIMEOUT)
+
+    monkeypatch.setattr(main, "create_ollama_readiness_client", client_factory)
+
+
 def test_health_keeps_static_status_and_model(client: TestClient) -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "model": main.MODEL}
+
+
+@pytest.mark.parametrize("model_field", ["name", "model"])
+def test_ready_when_ollama_has_configured_model(
+    client: TestClient,
+    monkeypatch,
+    model_field: str,
+) -> None:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, json={"models": [{model_field: main.MODEL}]})
+
+    install_readiness_transport(monkeypatch, handler)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "model": main.MODEL}
+    assert captured["url"] == f"{main.OLLAMA_URL}/api/tags"
+
+
+def test_ready_returns_503_when_model_is_missing(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"models": [{"name": "another-model"}]})
+
+    install_readiness_transport(monkeypatch, handler)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "model": main.MODEL,
+        "reason": "MODEL_NOT_FOUND",
+    }
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["connection", "timeout", "http_error", "invalid_json", "invalid_models"],
+)
+def test_ready_returns_503_when_ollama_is_unavailable(
+    client: TestClient,
+    monkeypatch,
+    failure: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if failure == "connection":
+            raise httpx.ConnectError("connection failed", request=request)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("timed out", request=request)
+        if failure == "http_error":
+            return httpx.Response(500, json={"error": "server error"})
+        if failure == "invalid_json":
+            return httpx.Response(200, content=b"not-json")
+        return httpx.Response(200, json={"models": "invalid"})
+
+    install_readiness_transport(monkeypatch, handler)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "model": main.MODEL,
+        "reason": "OLLAMA_UNAVAILABLE",
+    }
 
 
 def test_149_characters_returns_stable_error(client: TestClient) -> None:
@@ -292,6 +373,17 @@ def test_openapi_exposes_success_and_stable_error_contracts() -> None:
     for status_code in ("400", "502", "503", "504"):
         schema = operation["responses"][status_code]["content"]["application/json"]["schema"]
         assert schema["$ref"].endswith("/ErrorResponse")
+
+
+def test_openapi_exposes_readiness_contract() -> None:
+    operation = main.app.openapi()["paths"]["/ready"]["get"]
+
+    assert {"200", "503"} <= set(operation["responses"])
+    for status_code in ("200", "503"):
+        schema = operation["responses"][status_code]["content"]["application/json"][
+            "schema"
+        ]
+        assert schema["$ref"].endswith("/ReadinessResponse")
 
 
 def test_internal_contract_does_not_copy_public_backend_envelope(

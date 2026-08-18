@@ -67,6 +67,7 @@ Ollama 배치 방식과 GPU, SQS worker·재시도·DLQ 정책은 아직 확정 
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama 주소 |
 | `LLM_MODEL` | `gemma3:4b` | 사용할 모델 |
 | `LLM_TIMEOUT` | `120` | 응답 대기 시간(초) |
+| `LLM_READY_TIMEOUT` | `2` | Ollama readiness 확인 제한 시간(초) |
 | `SUMMARY_MIN_CHARS` | `150` | 요약 요청 최소 글자 수 |
 | `SUMMARY_MAX_CHARS` | `8000` | 모델에 전달할 최대 글자 수 |
 | `LLM_MAX_CONCURRENT_REQUESTS` | `1` | 프로세스당 동시 모델 호출 수 |
@@ -77,7 +78,12 @@ Ollama 배치 방식과 GPU, SQS worker·재시도·DLQ 정책은 아직 확정 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `GET` | `/health` | 상태 확인 |
+| `GET` | `/ready` | Ollama 연결 및 설정 모델 준비 확인 |
 | `POST` | `/internal/v1/llm/summary` | 텍스트 요약 |
+
+`/health`는 LLM API 프로세스의 생존만 확인합니다. `/ready`는 Ollama의
+`/api/tags`를 조회하며 연결할 수 없거나 `LLM_MODEL`이 없으면 `503`을 반환합니다.
+Kubernetes에서는 `/health`를 liveness/startup, `/ready`를 readiness probe로 사용합니다.
 
 ```bash
 curl -X POST http://localhost:8000/internal/v1/llm/summary \

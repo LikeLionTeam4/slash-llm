@@ -15,7 +15,7 @@ class GenerateRequest(BaseModel):
 
 @app.get("/api/tags")
 def tags():
-    return {"models": [{"name": "team-demo"}]}
+    return {"models": [{"name": "gemma3:4b"}]}
 
 
 @app.post("/api/generate")

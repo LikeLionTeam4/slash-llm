@@ -56,6 +56,9 @@ jobs:
             --retry 30 --retry-delay 1 --retry-connrefused --retry-all-errors \
             http://127.0.0.1:8000/health \
             | python -c 'import json, sys; body = json.load(sys.stdin); assert body == {"status": "ok", "model": "gemma3:4b"}, body'
+          curl --fail --silent --show-error \
+            http://127.0.0.1:8000/ready \
+            | python -c 'import json, sys; body = json.load(sys.stdin); assert body == {"status": "ready", "model": "gemma3:4b"}, body'
           python -c 'import httpx; body = httpx.post("http://127.0.0.1:8000/internal/v1/llm/summary", json={"text": "가" * 150, "requestId": "container-smoke", "taskId": "task-smoke"}).json(); expected = {"summary": "팀 테스트용 요약 결과입니다.", "model": "gemma3:4b", "requestId": "container-smoke", "taskId": "task-smoke"}; assert body == expected, body'
       - name: Stop test services
         if: always()
