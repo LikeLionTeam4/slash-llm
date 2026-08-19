@@ -178,6 +178,31 @@ cd slash-llm
 상태 조회, 누락 인자, NLU→LLM 요약, 미지원 명령까지 5개 계약을 확인한 뒤
 모두 종료합니다. 모델 설치 없이 팀원이 API 연결을 빠르게 확인할 때 사용합니다.
 
+### dev 배포 스모크 테스트
+
+배포된 LLM API와 실제 Ollama 모델의 연결은 아래 스크립트로 확인합니다. 스크립트는
+`/health`, `/ready`, `/internal/v1/llm/summary`를 차례로 호출하고 모델명과 추적 ID를
+검증합니다. 합성 입력만 사용하며 입력 원문과 요약 결과는 출력하지 않습니다.
+
+```bash
+LLM_SMOKE_BASE_URL=http://<slash-llm-address> \
+  .venv/bin/python scripts/smoke_dev.py
+```
+
+서비스가 클러스터 내부에만 열려 있으면 먼저 port-forward를 사용합니다.
+
+```bash
+kubectl -n <namespace> port-forward svc/slash-llm 18000:80
+LLM_SMOKE_BASE_URL=http://127.0.0.1:18000 \
+  .venv/bin/python scripts/smoke_dev.py
+```
+
+기대 모델이 다르면 `LLM_SMOKE_MODEL`을 설정합니다. probe 제한 시간은
+`LLM_SMOKE_PROBE_TIMEOUT`(기본 10초), 실제 요약 제한 시간은
+`LLM_SMOKE_SUMMARY_TIMEOUT`(기본 180초)으로 따로 조정할 수 있습니다. 성공하면 실제
+요약 처리 시간도 출력합니다. Ollama EC2가 정지된 시간에는 `/ready`가 `503`을 반환하는
+것이 정상이며, 실제 추론 검증은 EC2 가동 시간에 실행해야 합니다.
+
 실제 Ollama와 `gemma3:4b`를 준비했다면 다음과 같이 모델 호출까지 확인합니다.
 
 ```bash
