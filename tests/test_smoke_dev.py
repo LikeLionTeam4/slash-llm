@@ -72,6 +72,30 @@ def test_run_smoke_reports_stable_failure_code(status_code, payload, expected) -
         )
 
 
+@pytest.mark.parametrize(
+    ("path", "payload", "expected"),
+    [
+        ("/health", {"status": "down", "model": "gemma3:4b"}, "/health 상태"),
+        ("/health", {"status": "ok", "model": "other"}, "/health 모델"),
+        ("/ready", {"status": "not_ready", "model": "gemma3:4b"}, "/ready 상태"),
+        ("/ready", {"status": "ready", "model": "other"}, "/ready 모델"),
+    ],
+)
+def test_run_smoke_distinguishes_status_and_model_mismatches(
+    path, payload, expected
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == path:
+            return httpx.Response(200, json=payload)
+        return success_handler(request)
+
+    with pytest.raises(smoke_dev.SmokeError, match=expected):
+        smoke_dev.run_smoke(
+            "http://llm.test",
+            transport=httpx.MockTransport(handler),
+        )
+
+
 def test_run_smoke_rejects_tracking_id_mismatch() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/health":
@@ -145,9 +169,12 @@ def test_main_requires_deployed_base_url(monkeypatch, capsys) -> None:
     "variable",
     ["LLM_SMOKE_PROBE_TIMEOUT", "LLM_SMOKE_SUMMARY_TIMEOUT"],
 )
-def test_main_rejects_invalid_timeout_environment(variable, monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("value", ["invalid", "nan", "inf", "-inf", "0", "-1"])
+def test_main_rejects_invalid_timeout_environment(
+    variable, value, monkeypatch, capsys
+) -> None:
     monkeypatch.setenv("LLM_SMOKE_BASE_URL", "http://llm.test")
-    monkeypatch.setenv(variable, "invalid")
+    monkeypatch.setenv(variable, value)
     monkeypatch.setattr("sys.argv", ["smoke_dev.py"])
 
     with pytest.raises(SystemExit) as captured:

@@ -2,6 +2,7 @@
 """Verify a deployed slash-llm instance and its configured Ollama model."""
 
 import argparse
+import math
 import os
 import sys
 import time
@@ -27,7 +28,7 @@ def positive_float(value: str) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("0보다 큰 숫자를 입력해 주세요.") from exc
-    if parsed <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         raise argparse.ArgumentTypeError("0보다 큰 숫자를 입력해 주세요.")
     return parsed
 
@@ -85,13 +86,17 @@ def run_smoke(
             transport=transport,
         ) as client:
             health = require_ok(client.get("/health"), "/health")
-            if health.get("status") != "ok" or health.get("model") != expected_model:
-                raise SmokeError("/health 상태 또는 모델이 기대값과 다릅니다.")
+            if health.get("status") != "ok":
+                raise SmokeError("/health 상태가 기대값과 다릅니다.")
+            if health.get("model") != expected_model:
+                raise SmokeError("/health 모델이 기대값과 다릅니다.")
             print("✓ /health")
 
             ready = require_ok(client.get("/ready"), "/ready")
-            if ready.get("status") != "ready" or ready.get("model") != expected_model:
-                raise SmokeError("/ready 상태 또는 모델이 기대값과 다릅니다.")
+            if ready.get("status") != "ready":
+                raise SmokeError("/ready 상태가 기대값과 다릅니다.")
+            if ready.get("model") != expected_model:
+                raise SmokeError("/ready 모델이 기대값과 다릅니다.")
             print(f"✓ /ready ({expected_model})")
 
             started_at = time.monotonic()
