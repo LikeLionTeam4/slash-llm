@@ -1,4 +1,23 @@
-"""slash-llm — HTTP 기반 Gemma 요약 서비스."""
+"""slash-llm — HTTP 기반 Gemma 요약 서비스.
+
+`slash-api`가 내부 HTTP로 호출하는 요약 전용 서비스다. 사용자에게 직접 열리지 않는다.
+
+제공하는 것
+    ``GET  /health``                    프로세스 생존만 확인. Ollama는 보지 않는다
+    ``GET  /ready``                     Ollama 연결과 ``LLM_MODEL`` 존재 확인
+    ``POST /internal/v1/llm/summary``   텍스트 요약
+
+``/health``와 ``/ready``를 가른 이유는, 정적 200만 보면 Ollama가 죽어도 정상 Pod로
+오인되기 때문이다. Kubernetes는 ``/health``를 liveness·startup에, ``/ready``를
+readiness에 쓴다 — 준비되지 않은 Pod로 트래픽이 가지 않게 하려는 것이다.
+
+모델 실행은 이 프로세스가 하지 않는다. Ollama를 별도로 띄우고 ``OLLAMA_URL``로
+주소만 주입받는다. 모델을 이미지에 넣지 않아 애플리케이션 Pod와 GPU 실행 환경을
+분리할 수 있다.
+
+**현재 이 서비스는 dev에 배포돼 있지 않다(2026-08-25 제거).** 요약의 서버 경로는
+`slash-nlu`의 CPU 추출 요약이 담당한다. 자세한 경위는 README "현재 상태" 참고.
+"""
 
 import asyncio
 import os
